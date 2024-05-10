@@ -11,36 +11,56 @@ import json
 import time
 
 
-def search_decathlon(item):
-    driver = webdriver.Chrome(
-        service=Service(), options=webdriver.ChromeOptions())
-    driver.get(DECATHLON)
+class DecathlonScraper:
+    def __init__(self, driver=webdriver.Chrome(service=Service(), options=webdriver.ChromeOptions()), url=DECATHLON):
+        self.driver = driver
+        self.url = url
 
-    # Wait for the popup to appear and then close it
-    popup = WebDriverWait(driver, 5).until(
-        EC.presence_of_element_located((By.ID, "didomi-popup")))
-    print('Popup found')
-
-    popup_close_button = popup.find_element(
-        By.CSS_SELECTOR, "span")
-    popup_close_button.click()
-
-    time.sleep(2)
-    search_box = driver.find_element(By.CSS_SELECTOR, "input.svelte-1xw4dnq")
-    search_button = driver.find_element(
-        By.CSS_SELECTOR, "button.svelte-1xw4dnq")
-    search_box.send_keys(item)
-    search_button.click()
-    time.sleep(2)
-    product_captions = driver.find_elements(
-        By.CSS_SELECTOR, ".dpb-product-model-link")
-    print(product_captions)
-    for product in product_captions:
-        if product.tag_name == "a":
-            print(product.text)
-            print(product.get_attribute("href"))
-
-    driver.quit()
+    def fetch(self):
+        return self.driver.get(self.url)
 
 
-search_decathlon("Ropa deportiva")
+class DecathlonSearch(DecathlonScraper):
+    def __init__(self, item, driver=webdriver.Chrome(service=Service(), options=webdriver.ChromeOptions()), url=DECATHLON):
+        super().__init__(driver, url)
+        self.item = item
+
+    def remove_popup(self, popup_id="didomi-popup", sleep_time=2):
+        popup = WebDriverWait(self.driver, 5).until(
+            EC.presence_of_element_located((By.ID, popup_id)))
+
+        popup_close_button = popup.find_element(
+            By.CSS_SELECTOR, "span")
+        popup_close_button.click()
+        time.sleep(sleep_time)
+        return True
+
+    def search(self, search_class="svelte-1xw4dnq", sleep_time=2):
+
+        search_box = self.driver.find_element(
+            By.CSS_SELECTOR, f"input.{search_class}")
+        search_button = self.driver.find_element(
+            By.CSS_SELECTOR, f"button.{search_class}")
+        search_box.send_keys(self.item)
+        search_button.click()
+        time.sleep(sleep_time)
+        return True
+
+    def get_products(self, product_item_css=".dpb-product-model-link"):
+        product_captions = self.driver.find_elements(
+            By.CSS_SELECTOR, product_item_css)
+
+        products = list()
+        for product in product_captions:
+            if product.tag_name == "a":
+                products.append({
+                    "name": product.text,
+                    "url": product.get_attribute("href")
+                })
+        return products
+
+    def scrape(self):
+        self.fetch()
+        self.remove_popup()
+        self.search()
+        return self.get_products()
