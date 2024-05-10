@@ -33,10 +33,12 @@ def search_decathlon(item):
     search_button.click()
     time.sleep(2)
     product_captions = driver.find_elements(
-        By.CSS_SELECTOR, "a.dpb-product-model-link svelte-1bclr8g")
+        By.CSS_SELECTOR, ".dpb-product-model-link")
     print(product_captions)
     for product in product_captions:
-        print(product.get_attribute("href"))
+        if product.tag_name == "a":
+            print(product.text)
+            print(product.get_attribute("href"))
 
     driver.quit()
 
