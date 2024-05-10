@@ -5,23 +5,30 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import NoSuchElementException
-from selectorlib import Extractor
-import requests
-import json
+import pandas as pd
 import time
 
 
 class DecathlonScraper:
-    def __init__(self, driver=webdriver.Chrome(service=Service(), options=webdriver.ChromeOptions()), url=DECATHLON):
-        self.driver = driver
+    def __init__(self,  driver=None, url=DECATHLON):
+        if driver is None:
+            self.driver = webdriver.Chrome(
+                service=Service(), options=webdriver.ChromeOptions())
+        else:
+            self.driver = driver
         self.url = url
 
+    def get_driver(self):
+        return self.driver
+
     def fetch(self):
-        return self.driver.get(self.url)
+        print(f"Fetching {self.url}")
+        self.driver.get(self.url)
+        return True
 
 
 class DecathlonSearch(DecathlonScraper):
-    def __init__(self, item, driver=webdriver.Chrome(service=Service(), options=webdriver.ChromeOptions()), url=DECATHLON):
+    def __init__(self,  item, driver=None, url=DECATHLON):
         super().__init__(driver, url)
         self.item = item
 
@@ -60,7 +67,76 @@ class DecathlonSearch(DecathlonScraper):
         return products
 
     def scrape(self):
-        self.fetch()
-        self.remove_popup()
-        self.search()
-        return self.get_products()
+
+        fetch = self.fetch()
+        if fetch:
+            popup = self.remove_popup()
+        if popup:
+            search = self.search()
+        if search:
+            return self.get_products()
+
+
+class ProductScraper(DecathlonScraper):
+    def __init__(self, driver=None, url=None):
+        super().__init__(driver, url)
+
+    def scrape(self):
+        time.sleep(2)
+        fetch = self.fetch()
+        if fetch:
+            return self.parse_product_data()
+
+    def parse_product_data(self, product_section_css="section.vtmn-font-regular"):
+
+        product_data = self.driver.find_element(
+            By.CSS_SELECTOR, product_section_css)
+        print('---------------------------------------')
+        name = product_data.find_element(By.CSS_SELECTOR, "h1").text
+        print('Product Name:', name)
+        brand = product_data.find_element(By.TAG_NAME, "a").text
+        print('Brand:', brand)
+        brand_url = product_data.find_element(
+            By.TAG_NAME, "a").get_attribute("href")
+        price = product_data.find_element(
+            By.CSS_SELECTOR, "span.vtmn-price").text
+        print('Price:', price)
+        reviews_url = product_data.find_element(
+            By.CLASS_NAME, "review-link").get_attribute("href")
+        description = product_data.find_element(
+            By.CSS_SELECTOR, "p.product-description").text
+        print('Description:', description)
+        try:
+            color = product_data.find_element(
+                By.CSS_SELECTOR, "span.current-model-color").text
+            print('Color:', color)
+        except NoSuchElementException:
+            color = None
+            print('Color: Not available')
+
+        return {
+            "name": name,
+            "brand": brand,
+            "brand_url": brand_url,
+            "price": price,
+            "reviews_url": reviews_url,
+            "description": description,
+            "color": color
+        }
+
+
+def main(query="balón de fútbol"):
+    ds = DecathlonSearch(query)
+    products = ds.scrape()
+    driver = ds.get_driver()
+    product_data = list()    # Get the driver to pass to the ProductScraper
+    for product in products:
+        new_url = product["url"]
+        pds = ProductScraper(driver, new_url)
+        product_data.append(pds.scrape())
+
+    return product_data
+
+
+if __name__ == "__main__":
+    print(main())
