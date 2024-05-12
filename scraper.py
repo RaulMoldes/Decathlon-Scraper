@@ -4,12 +4,14 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, NoSuchWindowException, ElementNotInteractableException
 import pandas as pd
 import time
+import os
 import sys
 
 QUERIES_TO_MAKE = ['balón']
+URLS_OUTPUT_FILE = 'data/decathlon_urls.csv'
 PRODUCTS_OUTPUT_FILE = 'data/decathlon_products.csv'
 REVIEWS_OUTPUT_FILE = 'data/decathlon_reviews.csv'
 CHARACTERISTICS_OUTPUT_FILE = 'data/decathlon_characteristics.csv'
@@ -44,6 +46,26 @@ class DecathlonScraper:
         else:
             self.driver = driver
         self.url = url
+
+    def remove_popup(self, popup_id: str = "didomi-popup", sleep_time: int = 2) -> bool:
+        """
+        Removes a popup from the web page.
+
+        Args:
+            popup_id (str): The ID of the popup element to be removed. Default is "didomi-popup".
+            sleep_time (int): The time to sleep after closing the popup. Default is 2 seconds.
+
+        Returns:
+            bool: True if the popup was successfully removed, False otherwise.
+        """
+        popup = WebDriverWait(self.driver, 5).until(
+            EC.presence_of_element_located((By.ID, popup_id)))
+
+        popup_close_button = popup.find_element(
+            By.CSS_SELECTOR, "span")
+        popup_close_button.click()
+        time.sleep(sleep_time)
+        return True
 
     def get_driver(self):
         """
@@ -93,26 +115,6 @@ class DecathlonSearcher(DecathlonScraper):
         next_page_button = self.driver.find_elements(
             By.CSS_SELECTOR, next_page_css)[-1]
         next_page_button.click()
-        time.sleep(sleep_time)
-        return True
-
-    def remove_popup(self, popup_id: str = "didomi-popup", sleep_time: int = 2) -> bool:
-        """
-        Removes a popup from the web page.
-
-        Args:
-            popup_id (str): The ID of the popup element to be removed. Default is "didomi-popup".
-            sleep_time (int): The time to sleep after closing the popup. Default is 2 seconds.
-
-        Returns:
-            bool: True if the popup was successfully removed, False otherwise.
-        """
-        popup = WebDriverWait(self.driver, 5).until(
-            EC.presence_of_element_located((By.ID, popup_id)))
-
-        popup_close_button = popup.find_element(
-            By.CSS_SELECTOR, "span")
-        popup_close_button.click()
         time.sleep(sleep_time)
         return True
 
@@ -173,15 +175,17 @@ class DecathlonSearcher(DecathlonScraper):
             for product in product_captions:
 
                 if product.tag_name == "a":
-                    products.append({
+                    products.append(pd.DataFrame({
                         "name": product.text,
-                        "url": product.get_attribute("href")
-                    })
+                        "url": product.get_attribute("href"),
+                        "id": product.get_attribute("href").split("mc=")[-1]
+                    }, index=[0]))
             try:
                 self.next_page()
             except IndexError:
                 break
-
+        products = pd.concat(products)
+        products.to_csv(URLS_OUTPUT_FILE, index=False)
         return products
 
     def scrape(self):
@@ -220,11 +224,108 @@ class ProductReviewsScraper(DecathlonScraper):
         """
         time.sleep(2)
         fetch = self.fetch()
+        try:
+            self.remove_popup()
+        except (TimeoutException, NoSuchWindowException) as e:
+            pass
+
         if fetch:
             return self.parse_reviews_data()
 
-    def parse_reviews_data(self, reviews_css: str = "div.vtmn-review") -> dict:
-        pass
+    def expand_reviews(self, reviews_section, sleep_time=2):
+        try:
+            expand_reviews_button = reviews_section.find_element(
+                By.XPATH, '//span[contains(text(), "Ver todas las opiniones")]/parent::button')
+            expand_reviews_button.click()
+            time.sleep(sleep_time)
+        except NoSuchElementException:
+            pass
+        return True
+
+    def go_to_reviews(self, sleep_time=2):
+        go_to_reviews_button = self.driver.find_element(
+            By.XPATH, '//button[contains(text(), "Opiniones de usuarios")]')
+        go_to_reviews_button.click()
+        time.sleep(sleep_time)
+        return True
+
+    def open_reviews(self, reviews_id="reviews-floor", sleep_time=2):
+
+        try:
+
+            product_reviews = WebDriverWait(self.driver, sleep_time).until(
+                EC.presence_of_element_located((By.ID, reviews_id)))
+            return self.expand_reviews(product_reviews)
+
+        except (NoSuchElementException, TimeoutException, ElementNotInteractableException) as e:
+
+            open_reviews_button = self.driver.find_element(
+                By.XPATH, '//span[contains(text(), "Opiniones de usuarios")]/following-sibling::button')
+            open_reviews_button.click()
+            time.sleep(sleep_time)
+            return self.open_reviews(reviews_id, sleep_time)
+
+    def parse_reviews_data(self) -> pd.DataFrame:
+        if self.go_to_reviews():
+            opened = self.open_reviews()
+
+        if opened:
+
+            product_id = self.url.split("mc=")[-1]
+
+            reviews = self.driver.find_elements(
+                By.CSS_SELECTOR, "article.review-item")
+
+            for review in reviews:
+                author_data = review.find_element(
+                    By.CSS_SELECTOR, "div.vtmn-text-lg").text
+                author_data = author_data.split("|")
+                print('author:', author_data)
+
+                if len(author_data) == 2:
+                    author_data.append('Unknown')
+                try:
+                    title = review.find_element(
+                        By.CSS_SELECTOR, "h3.review-title").text
+                    print('Title:', title)
+                except NoSuchElementException:
+                    title = None
+                try:
+                    usage = review.find_element(
+                        By.CSS_SELECTOR, "div.product-usage").text
+                    print('Usage:', usage)
+                except NoSuchElementException:
+                    usage = None
+                try:
+                    rating = review.find_element(
+                        By.CSS_SELECTOR, "span.vtmn-rating_comment--primary").text
+                    print('Rating:', rating)
+                except NoSuchElementException:
+                    rating = None
+                try:
+                    date = review.find_element(
+                        By.TAG_NAME, "time").get_attribute("datetime")
+                    print('Date:', date)
+                except NoSuchElementException:
+                    date = None
+                try:
+                    text = review.find_element(By.CSS_SELECTOR, "p").text
+                    print('Text:', text)
+                except NoSuchElementException:
+                    text = None
+
+                return pd.DataFrame({
+                    "product_id": product_id,
+                    "title": title,
+                    "usage": usage,
+                    "author": author_data[0].strip(),   # Author
+                    "Sex": author_data[1].strip(),  # Author
+                    "Location": author_data[2].strip(),  # Author
+                    "rating": rating,
+
+                    "date": date,
+                    "text": text
+                }, index=[0])
 
 
 class ProductCharacteristicsScraper(DecathlonScraper):
@@ -269,7 +370,7 @@ class ProductScraper(DecathlonScraper):
     def __init__(self, driver=None, url=None):
         super().__init__(driver, url)
 
-    def scrape(self) -> dict:
+    def scrape(self) -> pd.DataFrame:
         """
         Scrapes the product data from the website.
 
@@ -279,6 +380,10 @@ class ProductScraper(DecathlonScraper):
         """
         time.sleep(2)
         fetch = self.fetch()
+        try:
+            self.remove_popup()
+        except (TimeoutException, NoSuchWindowException) as e:
+            print(e)
         if fetch:
             return self.parse_product_data()
 
@@ -300,7 +405,7 @@ class ProductScraper(DecathlonScraper):
         else:
             return 'Unisex'
 
-    def parse_product_data(self, product_images_css: str = "div.product-images", product_section_css: str = "section.vtmn-font-regular") -> dict:
+    def parse_product_data(self, product_images_css: str = "div.product-images", product_section_css: str = "section.vtmn-font-regular") -> pd.DataFrame:
         """
         Parses the product data from the web page.
 
@@ -380,7 +485,7 @@ class ProductScraper(DecathlonScraper):
             n_reviews = 0
             print('Reviews: Not available')
 
-        return {
+        return pd.DataFrame({
             "id": product_id,
             "name": name,
             "genre": genre,  # "Hombre", "Mujer", "Niño", "Niña", "Unisex
@@ -393,10 +498,11 @@ class ProductScraper(DecathlonScraper):
             "rating": rating,
             "n_reviews": n_reviews,
             "color": color
-        }
+        }, index=[0])
 
 
 MAPPER = {
+
     'products': {
         'output_file': PRODUCTS_OUTPUT_FILE,
         'scraper': ProductScraper,
@@ -413,19 +519,24 @@ MAPPER = {
 }
 
 
-def query_decathlon(query: str = "balón", search_for='products') -> pd.DataFrame:
-    ds = DecathlonSearcher(query)
-    products = ds.scrape()
-    driver = ds.get_driver()
+def query_decathlon(query: str = "balón", search_for='reviews', use_cache=True) -> pd.DataFrame:
+    if not use_cache and os.path.exists(URLS_OUTPUT_FILE):
+        ds = DecathlonSearcher(query)
+        products = ds.scrape()
+        driver = ds.get_driver()
+    else:
+        products = pd.read_csv(URLS_OUTPUT_FILE)
+        driver = webdriver.Chrome(
+            service=Service(), options=webdriver.ChromeOptions())
     product_data = list()
-    print(len(products))    # Get the driver to pass to the ProductScraper
-    for product in products:
-        new_url = product["url"]
+    # Get the driver to pass to the ProductScraper
+    for row in products.iterrows():
+
         try:
-            scraper = MAPPER[search_for]['scraper'](driver, new_url)
-            product_data.append(pd.DataFrame(scraper.scrape(), index=[0]))
+            scraper = MAPPER[search_for]['scraper'](driver, row[1]["url"])
+            product_data.append(scraper.scrape())
         except NoSuchElementException:
-            print(f"Could not scrape {product['name']}")
+            print(f"Could not scrape {row[1]['name']}")
             continue
 
     product_data = pd.concat(product_data, ignore_index=True)
@@ -447,7 +558,7 @@ if __name__ == "__main__":
         print("Usage: python -m scraper *<queries> --get <info>")
         print("Example: python -m scraper balón --get products")
         print("Valid info: products, reviews, characteristics")
-        main(queries=QUERIES_TO_MAKE, tipo='products')
+        main(queries=QUERIES_TO_MAKE, tipo='reviews')
         sys.exit()
     elif sys.argv[-2] == '--get':
         assert sys.argv[-1] in MAPPER.keys(
