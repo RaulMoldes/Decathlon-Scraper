@@ -232,6 +232,25 @@ class ProductReviewsScraper(DecathlonScraper):
         if fetch:
             return self.parse_reviews_data()
 
+    def parse_author_data(self, author_data: str) -> tuple:
+        """
+        Parses the author data from the reviews.
+
+        Args:
+            author_data (str): The author data to parse.
+
+        Returns:
+            list: A list containing the author data"""
+        author_data = author_data.split("|")
+        author_data = [data.strip() for data in author_data]
+        if len(author_data) == 2:
+            author_data.append('Unknown')
+        name = author_data[0]
+        sex = author_data[1] if author_data[1] in [
+            'Hombre', 'Mujer'] else 'Unknown'
+        location = author_data[2] if '/' not in author_data[2] else 'Unknown'
+        return name, sex, location
+
     def expand_reviews(self, reviews_section, sleep_time=2):
         try:
             expand_reviews_button = reviews_section.find_element(
@@ -259,15 +278,16 @@ class ProductReviewsScraper(DecathlonScraper):
 
         except (NoSuchElementException, TimeoutException, ElementNotInteractableException) as e:
 
-            open_reviews_button = self.driver.find_element(
-                By.XPATH, '//span[contains(text(), "Opiniones de usuarios")]/following-sibling::button')
+            open_reviews_button = WebDriverWait(self.driver, sleep_time).until(
+                EC.presence_of_element_located((
+                    By.XPATH, '//span[contains(text(), "Opiniones de usuarios")]/following-sibling::button')))
             open_reviews_button.click()
             time.sleep(sleep_time)
             return self.open_reviews(reviews_id, sleep_time)
 
-    def parse_reviews_data(self) -> pd.DataFrame:
-        if self.go_to_reviews():
-            opened = self.open_reviews()
+    def parse_reviews_data(self, sleep_time=2) -> pd.DataFrame:
+        if self.go_to_reviews(sleep_time=sleep_time):
+            opened = self.open_reviews(sleep_time=sleep_time)
 
         if opened:
 
@@ -275,15 +295,14 @@ class ProductReviewsScraper(DecathlonScraper):
 
             reviews = self.driver.find_elements(
                 By.CSS_SELECTOR, "article.review-item")
-
+            print('---------------------------------------')
+            reviews_list = list()
+            if len(reviews) == 0:
+                return None
             for review in reviews:
                 author_data = review.find_element(
                     By.CSS_SELECTOR, "div.vtmn-text-lg").text
-                author_data = author_data.split("|")
-                print('author:', author_data)
-
-                if len(author_data) == 2:
-                    author_data.append('Unknown')
+                name, sex, location = self.parse_author_data(author_data)
                 try:
                     title = review.find_element(
                         By.CSS_SELECTOR, "h3.review-title").text
@@ -314,18 +333,18 @@ class ProductReviewsScraper(DecathlonScraper):
                 except NoSuchElementException:
                     text = None
 
-                return pd.DataFrame({
+                reviews_list.append(pd.DataFrame({
                     "product_id": product_id,
                     "title": title,
                     "usage": usage,
-                    "author": author_data[0].strip(),   # Author
-                    "Sex": author_data[1].strip(),  # Author
-                    "Location": author_data[2].strip(),  # Author
+                    "author": name,   # Author
+                    "Sex": sex,  # Author
+                    "Location": location,  # Author
                     "rating": rating,
-
                     "date": date,
                     "text": text
-                }, index=[0])
+                }, index=[0]))
+            return pd.concat(reviews_list, ignore_index=True)
 
 
 class ProductCharacteristicsScraper(DecathlonScraper):
@@ -346,8 +365,60 @@ class ProductCharacteristicsScraper(DecathlonScraper):
         if fetch:
             return self.parse_characteristics_data()
 
-    def parse_characteristics_data(self, characteristics_section_css: str = "") -> dict:
-        pass
+    def go_to_characteristics(self, sleep_time=2):
+        go_to_chars_button = self.driver.find_element(
+            By.XPATH, '//button[contains(text(), "Características principales")]')
+        go_to_chars_button.click()
+        time.sleep(sleep_time)
+        return True
+
+    def open_characteristics(self, reviews_id="floor-content", sleep_time=2):
+
+        try:
+
+            product_characteristics = WebDriverWait(self.driver, sleep_time).until(
+                EC.presence_of_element_located((By.ID, reviews_id)))
+            return self.expand_characteristics(product_characteristics)
+
+        except (NoSuchElementException, TimeoutException, ElementNotInteractableException) as e:
+
+            open_reviews_button = self.driver.find_element(
+                By.XPATH, '//span[contains(text(), "Características principales")]/following-sibling::button')
+            open_reviews_button.click()
+            time.sleep(sleep_time)
+            return self.open_reviews(reviews_id, sleep_time)
+
+    def parse_characteristics_data(self, sleep_time=2) -> pd.DataFrame:
+        if self.go_to_characteristics(sleep_time=sleep_time):
+            opened = self.open_characteristics(sleep_time=sleep_time)
+
+        if opened:
+
+            product_id = self.url.split("mc=")[-1]
+
+            characteristics = self.driver.find_elements(
+                By.CSS_SELECTOR, "section.benefit")
+            print('---------------------------------------')
+            characteristics_list = list()
+            if len(characteristics) == 0:
+                return None
+            for characteristic in characteristics:
+                title = characteristic.find_element(
+                    By.CSS_SELECTOR, "h3").text
+                print('Title:', title)
+                try:
+                    description = characteristic.find_element(
+                        By.CSS_SELECTOR, "p").text
+                    print('Description:', description)
+                except NoSuchElementException:
+                    description = None
+
+                characteristics_list.append(pd.DataFrame({
+                    "product_id": product_id,
+                    "title": title,
+                    "description": description
+                }, index=[0]))
+            return pd.concat(characteristics_list, ignore_index=True)
 
 
 class ProductScraper(DecathlonScraper):
@@ -534,7 +605,10 @@ def query_decathlon(query: str = "balón", search_for='reviews', use_cache=True)
 
         try:
             scraper = MAPPER[search_for]['scraper'](driver, row[1]["url"])
-            product_data.append(scraper.scrape())
+            scraped = scraper.scrape()
+            if scraped is not None:
+                product_data.append(scraped)
+
         except NoSuchElementException:
             print(f"Could not scrape {row[1]['name']}")
             continue
