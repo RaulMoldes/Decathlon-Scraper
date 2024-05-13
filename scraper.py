@@ -1,4 +1,10 @@
-from base import DECATHLON
+# This is the script to scrape Decathlon website for products, reviews and characteristics.
+# The script uses Selenium to scrape the website and Pandas to store the data in CSV files.
+# @Author: RaulMoldes 
+# author-email: raul.moldes.work@gmail.com
+# Date: 2024-05-13
+# Version: 1.0
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -10,6 +16,7 @@ import time
 import os
 import sys
 
+DECATHLON = 'https://www.decathlon.es/es/'
 QUERIES_TO_MAKE = ['balón']
 URLS_OUTPUT_FILE = 'data/decathlon_urls.csv'
 PRODUCTS_OUTPUT_FILE = 'data/decathlon_products.csv'
