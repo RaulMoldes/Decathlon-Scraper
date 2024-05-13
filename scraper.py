@@ -1,10 +1,10 @@
 # This is the script to scrape Decathlon website for products, reviews and characteristics.
 # The script uses Selenium to scrape the website and Pandas to store the data in CSV files.
-# @Author: RaulMoldes 
+# @Author: RaulMoldes
 # author-email: raul.moldes.work@gmail.com
 # Date: 2024-05-13
 # Version: 1.0
-from database import insert_into_db
+from database import insert_into_db, connect
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -23,6 +23,8 @@ PRODUCTS_OUTPUT_FILE = 'data/decathlon_products.csv'
 REVIEWS_OUTPUT_FILE = 'data/decathlon_reviews.csv'
 CHARACTERISTICS_OUTPUT_FILE = 'data/decathlon_characteristics.csv'
 GENRES = ['Hombre', 'Mujer', 'Niño', 'Niña']
+
+DATABASE = connect()
 
 
 class DecathlonScraper:
@@ -182,11 +184,13 @@ class DecathlonSearcher(DecathlonScraper):
             for product in product_captions:
 
                 if product.tag_name == "a":
-                    products.append(pd.DataFrame({
+                    out = {
                         "name": product.text,
                         "url": product.get_attribute("href"),
                         "id": product.get_attribute("href").split("mc=")[-1]
-                    }, index=[0]))
+                    }
+                    insert_into_db(DATABASE, 'Products', out)
+                    products.append(pd.DataFrame(out, index=[0]))
             try:
                 self.next_page()
             except IndexError:
@@ -277,9 +281,8 @@ class ProductReviewsScraper(DecathlonScraper):
             go_to_reviews_button.click()
             time.sleep(sleep_time)
             return True
-        except (NoSuchElementException, ElementNotInteractableException) as e:
+        except (NoSuchElementException, ElementNotInteractableException, ElementClickInterceptedException) as e:
             return False
-        
 
     def open_reviews(self, reviews_id="reviews-floor", sleep_time=2):
 
@@ -307,7 +310,7 @@ class ProductReviewsScraper(DecathlonScraper):
                 return None
         else:
             return None
-        
+
         if opened:
 
             product_id = self.url.split("mc=")[-1]
@@ -362,7 +365,7 @@ class ProductReviewsScraper(DecathlonScraper):
                     "date": date,
                     "text": text
                 }
-                insert_into_db('reviews', out)
+                insert_into_db(DATABASE, 'Product_Reviews', out)
                 reviews_list.append(pd.DataFrame(out, index=[0]))
             return pd.concat(reviews_list, ignore_index=True)
 
@@ -392,7 +395,7 @@ class ProductCharacteristicsScraper(DecathlonScraper):
     def go_to_characteristics(self, sleep_time=2):
         try:
             go_to_chars_button = self.driver.find_element(
-            By.XPATH, '//button[contains(text(), "Características principales")]')
+                By.XPATH, '//button[contains(text(), "Características principales")]')
             go_to_chars_button.click()
             time.sleep(sleep_time)
             return True
@@ -408,10 +411,10 @@ class ProductCharacteristicsScraper(DecathlonScraper):
             return True
 
         except (NoSuchElementException, TimeoutException, ElementNotInteractableException) as e:
-            
+
             open_characteristics_button = WebDriverWait(self.driver, sleep_time).until(
                 EC.presence_of_element_located((By.XPATH, '//span[contains(text(), "Características principales")]/following-sibling::button')))
-                
+
             open_characteristics_button.click()
             time.sleep(sleep_time)
             return self.open_characteristics(characteristics_class, sleep_time)
@@ -446,7 +449,7 @@ class ProductCharacteristicsScraper(DecathlonScraper):
                     "title": title,
                     "description": description
                 }
-                insert_into_db('characteristics', out)
+                insert_into_db(DATABASE, 'Product_Characteristics', out)
                 characteristics_list.append(pd.DataFrame(out, index=[0]))
             return pd.concat(characteristics_list, ignore_index=True)
 
@@ -599,7 +602,7 @@ class ProductScraper(DecathlonScraper):
             "n_reviews": n_reviews,
             "color": color
         }
-        insert_into_db('products', out)
+        insert_into_db(DATABASE, 'Product_Data', out)
         return pd.DataFrame(out, index=[0])
 
 
@@ -621,7 +624,7 @@ MAPPER = {
 }
 
 
-def query_decathlon(query: str = "balón", search_for='characteristics', use_cache=True) -> pd.DataFrame:
+def query_decathlon(query: str = "balón", search_for='reviews', use_cache=True) -> pd.DataFrame:
     if not use_cache and os.path.exists(URLS_OUTPUT_FILE):
         ds = DecathlonSearcher(query)
         products = ds.scrape()
@@ -641,14 +644,14 @@ def query_decathlon(query: str = "balón", search_for='characteristics', use_cac
                 product_data.append(scraped)
 
         except NoSuchElementException:
-           print(f"Could not scrape {row[1]['name']}")
-           continue
+            print(f"Could not scrape {row[1]['name']}")
+            continue
 
     product_data = pd.concat(product_data, ignore_index=True)
     return product_data
 
 
-def main(queries: list = QUERIES_TO_MAKE, tipo='products') -> None:
+def main(queries: list = QUERIES_TO_MAKE, tipo='reviews') -> None:
     out = pd.DataFrame()
     for query in queries:
         out = pd.concat([out, query_decathlon(query, search_for=tipo)])
@@ -663,7 +666,7 @@ if __name__ == "__main__":
         print("Usage: python -m scraper *<queries> --get <info>")
         print("Example: python -m scraper balón --get products")
         print("Valid info: products, reviews, characteristics")
-        main(queries=QUERIES_TO_MAKE, tipo='characteristics')
+        main(queries=QUERIES_TO_MAKE, tipo='reviews')
         sys.exit()
     elif sys.argv[-2] == '--get':
         assert sys.argv[-1] in MAPPER.keys(
