@@ -634,15 +634,15 @@ def query_decathlon(query: str = "balón", search_for='characteristics', use_cac
     # Get the driver to pass to the ProductScraper
     for row in products.iterrows():
 
-       # try:
+        try:
             scraper = MAPPER[search_for]['scraper'](driver, row[1]["url"])
             scraped = scraper.scrape()
             if scraped is not None:
                 product_data.append(scraped)
 
-        #except NoSuchElementException:
-         #   print(f"Could not scrape {row[1]['name']}")
-          #  continue
+        except NoSuchElementException:
+           print(f"Could not scrape {row[1]['name']}")
+           continue
 
     product_data = pd.concat(product_data, ignore_index=True)
     return product_data
