@@ -4,7 +4,7 @@
 # author-email: raul.moldes.work@gmail.com
 # Date: 2024-05-13
 # Version: 1.0
-
+from database import insert_into_db
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -351,8 +351,7 @@ class ProductReviewsScraper(DecathlonScraper):
                     print('Text:', text)
                 except NoSuchElementException:
                     text = None
-
-                reviews_list.append(pd.DataFrame({
+                out = {
                     "product_id": product_id,
                     "title": title,
                     "usage": usage,
@@ -362,7 +361,9 @@ class ProductReviewsScraper(DecathlonScraper):
                     "rating": rating,
                     "date": date,
                     "text": text
-                }, index=[0]))
+                }
+                insert_into_db('reviews', out)
+                reviews_list.append(pd.DataFrame(out, index=[0]))
             return pd.concat(reviews_list, ignore_index=True)
 
 
@@ -440,12 +441,13 @@ class ProductCharacteristicsScraper(DecathlonScraper):
                     print('Description:', description)
                 except NoSuchElementException:
                     description = None
-
-                characteristics_list.append(pd.DataFrame({
+                out = {
                     "product_id": product_id,
                     "title": title,
                     "description": description
-                }, index=[0]))
+                }
+                insert_into_db('characteristics', out)
+                characteristics_list.append(pd.DataFrame(out, index=[0]))
             return pd.concat(characteristics_list, ignore_index=True)
 
 
@@ -583,8 +585,7 @@ class ProductScraper(DecathlonScraper):
         except NoSuchElementException:
             n_reviews = 0
             print('Reviews: Not available')
-
-        return pd.DataFrame({
+        out = {
             "id": product_id,
             "name": name,
             "genre": genre,  # "Hombre", "Mujer", "Niño", "Niña", "Unisex
@@ -597,7 +598,9 @@ class ProductScraper(DecathlonScraper):
             "rating": rating,
             "n_reviews": n_reviews,
             "color": color
-        }, index=[0])
+        }
+        insert_into_db('products', out)
+        return pd.DataFrame(out, index=[0])
 
 
 MAPPER = {
