@@ -4,7 +4,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, NoSuchWindowException, ElementNotInteractableException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, NoSuchWindowException, ElementNotInteractableException, ElementClickInterceptedException
 import pandas as pd
 import time
 import os
@@ -243,8 +243,10 @@ class ProductReviewsScraper(DecathlonScraper):
             list: A list containing the author data"""
         author_data = author_data.split("|")
         author_data = [data.strip() for data in author_data]
-        if len(author_data) == 2:
-            author_data.append('Unknown')
+
+        if len(author_data) < 3:
+            author_data.extend('Unknown' for _ in range(3 - len(author_data)))
+
         name = author_data[0]
         sex = author_data[1] if author_data[1] in [
             'Hombre', 'Mujer'] else 'Unknown'
@@ -262,11 +264,15 @@ class ProductReviewsScraper(DecathlonScraper):
         return True
 
     def go_to_reviews(self, sleep_time=2):
-        go_to_reviews_button = self.driver.find_element(
-            By.XPATH, '//button[contains(text(), "Opiniones de usuarios")]')
-        go_to_reviews_button.click()
-        time.sleep(sleep_time)
-        return True
+        try:
+            go_to_reviews_button = self.driver.find_element(
+                By.XPATH, '//button[contains(text(), "Opiniones de usuarios")]')
+            go_to_reviews_button.click()
+            time.sleep(sleep_time)
+            return True
+        except (NoSuchElementException, ElementNotInteractableException) as e:
+            return False
+        
 
     def open_reviews(self, reviews_id="reviews-floor", sleep_time=2):
 
@@ -287,8 +293,14 @@ class ProductReviewsScraper(DecathlonScraper):
 
     def parse_reviews_data(self, sleep_time=2) -> pd.DataFrame:
         if self.go_to_reviews(sleep_time=sleep_time):
-            opened = self.open_reviews(sleep_time=sleep_time)
-
+            try:
+                opened = self.open_reviews(sleep_time=sleep_time)
+            except (NoSuchElementException, TimeoutException, ElementClickInterceptedException) as e:
+                opened = False
+                return None
+        else:
+            return None
+        
         if opened:
 
             product_id = self.url.split("mc=")[-1]
@@ -362,42 +374,51 @@ class ProductCharacteristicsScraper(DecathlonScraper):
         """
         time.sleep(2)
         fetch = self.fetch()
+        try:
+            self.remove_popup()
+        except (TimeoutException, NoSuchWindowException) as e:
+            pass
         if fetch:
             return self.parse_characteristics_data()
 
     def go_to_characteristics(self, sleep_time=2):
-        go_to_chars_button = self.driver.find_element(
+        try:
+            go_to_chars_button = self.driver.find_element(
             By.XPATH, '//button[contains(text(), "Características principales")]')
-        go_to_chars_button.click()
-        time.sleep(sleep_time)
-        return True
+            go_to_chars_button.click()
+            time.sleep(sleep_time)
+            return True
+        except NoSuchElementException:
+            return False
 
-    def open_characteristics(self, reviews_id="floor-content", sleep_time=2):
+    def open_characteristics(self, characteristics_class="benefit", sleep_time=2):
 
         try:
 
             product_characteristics = WebDriverWait(self.driver, sleep_time).until(
-                EC.presence_of_element_located((By.ID, reviews_id)))
-            return self.expand_characteristics(product_characteristics)
+                EC.presence_of_element_located((By.CLASS_NAME, characteristics_class)))
+            return True
 
         except (NoSuchElementException, TimeoutException, ElementNotInteractableException) as e:
-
-            open_reviews_button = self.driver.find_element(
-                By.XPATH, '//span[contains(text(), "Características principales")]/following-sibling::button')
-            open_reviews_button.click()
+            
+            open_characteristics_button = WebDriverWait(self.driver, sleep_time).until(
+                EC.presence_of_element_located((By.XPATH, '//span[contains(text(), "Características principales")]/following-sibling::button')))
+                
+            open_characteristics_button.click()
             time.sleep(sleep_time)
-            return self.open_reviews(reviews_id, sleep_time)
+            return self.open_characteristics(characteristics_class, sleep_time)
 
     def parse_characteristics_data(self, sleep_time=2) -> pd.DataFrame:
         if self.go_to_characteristics(sleep_time=sleep_time):
             opened = self.open_characteristics(sleep_time=sleep_time)
-
+        else:
+            return None
         if opened:
 
             product_id = self.url.split("mc=")[-1]
 
             characteristics = self.driver.find_elements(
-                By.CSS_SELECTOR, "section.benefit")
+                By.CLASS_NAME, "benefit")
             print('---------------------------------------')
             characteristics_list = list()
             if len(characteristics) == 0:
@@ -590,7 +611,7 @@ MAPPER = {
 }
 
 
-def query_decathlon(query: str = "balón", search_for='reviews', use_cache=True) -> pd.DataFrame:
+def query_decathlon(query: str = "balón", search_for='characteristics', use_cache=True) -> pd.DataFrame:
     if not use_cache and os.path.exists(URLS_OUTPUT_FILE):
         ds = DecathlonSearcher(query)
         products = ds.scrape()
@@ -603,15 +624,15 @@ def query_decathlon(query: str = "balón", search_for='reviews', use_cache=True)
     # Get the driver to pass to the ProductScraper
     for row in products.iterrows():
 
-        try:
+       # try:
             scraper = MAPPER[search_for]['scraper'](driver, row[1]["url"])
             scraped = scraper.scrape()
             if scraped is not None:
                 product_data.append(scraped)
 
-        except NoSuchElementException:
-            print(f"Could not scrape {row[1]['name']}")
-            continue
+        #except NoSuchElementException:
+         #   print(f"Could not scrape {row[1]['name']}")
+          #  continue
 
     product_data = pd.concat(product_data, ignore_index=True)
     return product_data
@@ -620,7 +641,7 @@ def query_decathlon(query: str = "balón", search_for='reviews', use_cache=True)
 def main(queries: list = QUERIES_TO_MAKE, tipo='products') -> None:
     out = pd.DataFrame()
     for query in queries:
-        out = pd.concat([out, query_decathlon(query)])
+        out = pd.concat([out, query_decathlon(query, search_for=tipo)])
 
     out.to_csv(MAPPER[tipo]['output_file'], index=False)
     return None
@@ -632,15 +653,17 @@ if __name__ == "__main__":
         print("Usage: python -m scraper *<queries> --get <info>")
         print("Example: python -m scraper balón --get products")
         print("Valid info: products, reviews, characteristics")
-        main(queries=QUERIES_TO_MAKE, tipo='reviews')
+        main(queries=QUERIES_TO_MAKE, tipo='characteristics')
         sys.exit()
     elif sys.argv[-2] == '--get':
         assert sys.argv[-1] in MAPPER.keys(
         ), f'Invalid info: {sys.argv[-1]}, valid info: {list(MAPPER.keys())}'
-        main(queries=sys.argv[2:-2], tipo=sys.argv[-1])
+        print(f'Scraping {sys.argv[-1]}')
+        print(f'Queries: {sys.argv[1:-2]}')
+        main(queries=sys.argv[1:-2], tipo=sys.argv[-1])
         sys.exit()
     else:
         print('No info provided')
         print('Scraping products by default')
-        main(queries=sys.argv[2:], tipo='products')
+        main(queries=sys.argv[1:], tipo='products')
         sys.exit()
