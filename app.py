@@ -76,7 +76,7 @@ def update_graph(query: str, discount:bool):
     product_data = products[products['query'] == query]
     product_data = product_data[product_data['discount'] == discount]
     
-    product_data['rating'] = product_data['rating'].fillna(0.5)
+    product_data['rating'] = product_data['rating'].fillna(0)
     
     return px.scatter(product_data, x='n_reviews', y = 'price', labels={'n_reviews':'Number of reviews', 'price':'Price'}, title='Price vs Number of reviews',size = 'rating' , color = 'brand', hover_name='name')
 
