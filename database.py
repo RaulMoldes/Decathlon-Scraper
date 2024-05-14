@@ -1,5 +1,5 @@
 import pymongo
-import unidecode
+
 MONGODB_HOST = 'mongodb+srv://<user>:<password>@cluster0.vkv0htm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
 
 
@@ -65,8 +65,3 @@ def update_all_items(db, collection_name, query, data):
     collection = get_collection(db, collection_name)
     return collection.update_many({}, {"$set": data})
 
-
-data = {"query": unidecode.unidecode("balón")}
-db = connect()
-for collection in ["Products", "Product_Data", "Product_Reviews", "Product_Characteristics"]:
-    update_all_items(db, collection, {"query": unidecode.unidecode("balón")}, data)
