@@ -1,4 +1,4 @@
-# DecaScraper
+# Decathlon Scraper
 
 Decathlon Web Scraping Project. This project is a web scraper that extracts data from the website: `https://www.decathlon.es/es` and saves it to a csv file.
 The data can be used later for knowledge discovery purposes.
