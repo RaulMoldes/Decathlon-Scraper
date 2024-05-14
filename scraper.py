@@ -4,14 +4,12 @@
 # author-email: raul.moldes.work@gmail.com
 # Date: 2024-05-13
 # Version: 1.0
-from database import insert_into_db, connect
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, NoSuchWindowException, ElementNotInteractableException, ElementClickInterceptedException
-from unidecode import unidecode
 import pandas as pd
 import time
 import os
@@ -24,8 +22,6 @@ PRODUCTS_OUTPUT_FILE = 'data/decathlon_products.csv'
 REVIEWS_OUTPUT_FILE = 'data/decathlon_reviews.csv'
 CHARACTERISTICS_OUTPUT_FILE = 'data/decathlon_characteristics.csv'
 GENRES = ['Hombre', 'Mujer', 'Niño', 'Niña']
-
-DATABASE = connect()
 
 
 class DecathlonScraper:
@@ -42,7 +38,7 @@ class DecathlonScraper:
         fetch: Fetches the Decathlon website.
     """
 
-    def __init__(self, query = '', driver=None, url: str = DECATHLON):
+    def __init__(self, query='', driver=None, url: str = DECATHLON):
         """
         Initializes the DecathlonScraper object.
 
@@ -50,7 +46,7 @@ class DecathlonScraper:
             driver: The web driver used for scraping. If None, a new Chrome driver will be created.
             url: The URL of the Decathlon website.
         """
-        self.query = unidecode(query)
+        self.query = query
         if driver is None:
             self.driver = webdriver.Chrome(
                 service=Service(), options=webdriver.ChromeOptions())
@@ -100,7 +96,7 @@ class DecathlonScraper:
 
 
 class DecathlonSearcher(DecathlonScraper):
-    def __init__(self,  query:str='', driver=None, url: str = DECATHLON):
+    def __init__(self,  query: str = '', driver=None, url: str = DECATHLON):
         '''
         Initializes the DecathlonSearch object.
         Parameters:
@@ -112,7 +108,6 @@ class DecathlonSearcher(DecathlonScraper):
             None'''
         super().__init__(query, driver, url)
         self.item = query
-
 
     def next_page(self, next_page_css: str = "button.vtmn-btn", sleep_time: int = 2) -> bool:
         '''
@@ -193,7 +188,7 @@ class DecathlonSearcher(DecathlonScraper):
                         "url": product.get_attribute("href"),
                         "id": product.get_attribute("href").split("mc=")[-1]
                     }
-                    insert_into_db(DATABASE, 'Products', out)
+
                     products.append(pd.DataFrame(out, index=[0]))
             try:
                 self.next_page()
@@ -351,7 +346,7 @@ class ProductReviewsScraper(DecathlonScraper):
                 try:
                     date = review.find_element(
                         By.TAG_NAME, "time").get_attribute("datetime")
-                    
+
                     print('Date:', date)
                 except NoSuchElementException:
                     date = None
@@ -372,7 +367,7 @@ class ProductReviewsScraper(DecathlonScraper):
                     "date": date,
                     "text": text
                 }
-                insert_into_db(DATABASE, 'Product_Reviews', out)
+
                 reviews_list.append(pd.DataFrame(out, index=[0]))
             return pd.concat(reviews_list, ignore_index=True)
 
@@ -457,7 +452,7 @@ class ProductCharacteristicsScraper(DecathlonScraper):
                     "title": title,
                     "description": description
                 }
-                insert_into_db(DATABASE, 'Product_Characteristics', out)
+
                 characteristics_list.append(pd.DataFrame(out, index=[0]))
             return pd.concat(characteristics_list, ignore_index=True)
 
@@ -617,7 +612,7 @@ class ProductScraper(DecathlonScraper):
             "n_reviews": n_reviews,
             "color": color
         }
-        insert_into_db(DATABASE, 'Product_Data', out)
+
         return pd.DataFrame(out, index=[0])
 
 
@@ -641,7 +636,7 @@ MAPPER = {
 
 def query_decathlon(query: str = "balón", search_for='reviews', use_cache=True) -> pd.DataFrame:
     if not use_cache and os.path.exists(URLS_OUTPUT_FILE):
-        ds = DecathlonSearcher(query= query)
+        ds = DecathlonSearcher(query=query)
         products = ds.scrape()
         driver = ds.get_driver()
     else:
@@ -653,7 +648,8 @@ def query_decathlon(query: str = "balón", search_for='reviews', use_cache=True)
     for row in products.iterrows():
 
         try:
-            scraper = MAPPER[search_for]['scraper'](query= query, driver=driver, url =row[1]["url"])
+            scraper = MAPPER[search_for]['scraper'](
+                query=query, driver=driver, url=row[1]["url"])
             scraped = scraper.scrape()
             if scraped is not None:
                 product_data.append(scraped)
@@ -669,7 +665,7 @@ def query_decathlon(query: str = "balón", search_for='reviews', use_cache=True)
 def main(queries: list = QUERIES_TO_MAKE, tipo='reviews') -> None:
     out = pd.DataFrame()
     for query in queries:
-        
+
         out = pd.concat([out, query_decathlon(query, search_for=tipo)])
         with open('queries.txt', 'a') as f:
             f.write(query+'\n')
