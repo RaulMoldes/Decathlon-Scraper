@@ -1,5 +1,5 @@
 import pymongo
-
+import unidecode
 MONGODB_HOST = 'mongodb+srv://<user>:<password>@cluster0.vkv0htm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
 
 
@@ -34,10 +34,10 @@ def get_collection(db, collection_name):
 
 def insert_into_db(db, collection_name, data: dict):
     collection = get_collection(db, collection_name)
-    if collection_name == "Product_Data":
+    if collection_name in ["Products", "Product_Data"]:
         intent = collection.find_one({"id": data["id"]})
     else:
-        intent = collection.find_one({"title": data["title"]})
+        intent = collection.find_one({"title": data["title"],"product_id": data["product_id"]})
     if intent:
         print("Data already exists in database")
         return False
@@ -49,3 +49,24 @@ def insert_into_db(db, collection_name, data: dict):
         print("Error inserting data into database, saving to file instead.")
         return False
     return True
+
+
+def read_collection(db, collection_name):
+    collection = get_collection(db, collection_name)
+    return collection.find()
+
+
+def read_collection_by_query(db, collection_name, query):
+    collection = get_collection(db, collection_name)
+    return collection.find(query)
+
+
+def update_all_items(db, collection_name, query, data):
+    collection = get_collection(db, collection_name)
+    return collection.update_many({}, {"$set": data})
+
+
+data = {"query": unidecode.unidecode("balón")}
+db = connect()
+for collection in ["Products", "Product_Data", "Product_Reviews", "Product_Characteristics"]:
+    update_all_items(db, collection, {"query": unidecode.unidecode("balón")}, data)
