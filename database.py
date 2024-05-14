@@ -34,8 +34,10 @@ def get_collection(db, collection_name):
 
 def insert_into_db(db, collection_name, data: dict):
     collection = get_collection(db, collection_name)
-
-    intent = collection.find_one({"id": data["id"]})
+    if collection_name == "Product_Data":
+        intent = collection.find_one({"id": data["id"]})
+    else:
+        intent = collection.find_one({"title": data["title"]})
     if intent:
         print("Data already exists in database")
         return False
@@ -43,6 +45,7 @@ def insert_into_db(db, collection_name, data: dict):
     try:
         collection.insert_one(data)
     except Exception as e:
+        print(e)
         print("Error inserting data into database, saving to file instead.")
         return False
     return True

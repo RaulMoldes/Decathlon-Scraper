@@ -340,12 +340,14 @@ class ProductReviewsScraper(DecathlonScraper):
                 try:
                     rating = review.find_element(
                         By.CSS_SELECTOR, "span.vtmn-rating_comment--primary").text
+                    rating = float(rating.replace('/5', ''))   # Remove the /5
                     print('Rating:', rating)
                 except NoSuchElementException:
                     rating = None
                 try:
                     date = review.find_element(
                         By.TAG_NAME, "time").get_attribute("datetime")
+                    date = pd.to_datetime(date).date()
                     print('Date:', date)
                 except NoSuchElementException:
                     date = None
@@ -548,11 +550,15 @@ class ProductScraper(DecathlonScraper):
 
         current_price = product_data.find_element(
             By.CSS_SELECTOR, "span.vtmn-price_size--large").text
+        current_price = float(current_price.split(' ')[0].replace(',', '.'))
         print('Price:', current_price)
 
         try:
             previous_price = product_data.find_element(
                 By.CSS_SELECTOR, "span.vtmn-price_size--xsmall").text
+            previous_price = float(previous_price.split(' ')[
+                                   0].replace(',', '.'))
+
             discount = True
         except NoSuchElementException:
             previous_price = None
@@ -574,6 +580,7 @@ class ProductScraper(DecathlonScraper):
         try:
             rating = product_data.find_element(
                 By.CSS_SELECTOR, "span.vtmn-rating_comment--primary").text
+            rating = float(rating.replace('/5', ''))   # Remove the /5
             print('Rating:', rating)
         except NoSuchElementException:
             rating = None
@@ -584,6 +591,7 @@ class ProductScraper(DecathlonScraper):
                 By.CSS_SELECTOR, "button.review-link")
             n_reviews = reviews_button.text.replace(
                 ' opiniones', '').replace('Leer las ', '').replace('Leer ', '').replace(' opinión', '').split('\n')[-1]
+            n_reviews = int(n_reviews)
             print('Reviews:', n_reviews)
         except NoSuchElementException:
             n_reviews = 0
