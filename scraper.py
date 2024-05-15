@@ -10,13 +10,15 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, NoSuchWindowException, ElementNotInteractableException, ElementClickInterceptedException
+from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import time
 import os
 import sys
+import argparse
 
 DECATHLON = 'https://www.decathlon.es/es/'
-QUERIES_TO_MAKE = ['balón']
+DEFAULT_QUERY = 'balón'
 URLS_OUTPUT_FILE = 'data/decathlon_urls.csv'
 PRODUCTS_OUTPUT_FILE = 'data/decathlon_products.csv'
 REVIEWS_OUTPUT_FILE = 'data/decathlon_reviews.csv'
@@ -82,6 +84,9 @@ class DecathlonScraper:
             The web driver.
         """
         return self.driver
+
+    def log(self, message: str):
+        print(message)
 
     def fetch(self) -> bool:
         """
@@ -490,7 +495,7 @@ class ProductScraper(DecathlonScraper):
         try:
             self.remove_popup()
         except (TimeoutException, NoSuchWindowException) as e:
-            print(e)
+            pass
         if fetch:
             return self.parse_product_data()
 
@@ -634,62 +639,81 @@ MAPPER = {
 }
 
 
-def query_decathlon(query: str = "balón", search_for='reviews', use_cache=True) -> pd.DataFrame:
-    if not use_cache and os.path.exists(URLS_OUTPUT_FILE):
-        ds = DecathlonSearcher(query=query)
-        products = ds.scrape()
-        driver = ds.get_driver()
-    else:
-        products = pd.read_csv(URLS_OUTPUT_FILE)
-        driver = webdriver.Chrome(
-            service=Service(), options=webdriver.ChromeOptions())
+def query_decathlon(query: str = "balón", search_for='reviews', driver=None, max_workers=10) -> pd.DataFrame:
+    """
+    Queries Decathlon website for product information.
+
+    Args:
+        query (str, optional): The search query. Defaults to "balón".
+        search_for (str, optional): The type of information to search for. Defaults to 'reviews'.
+        driver (object, optional): The driver object for web scraping. Defaults to None.
+        max_workers (int, optional): The maximum number of worker threads. Defaults to 10.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the scraped product data.
+    """
+    products = pd.read_csv(URLS_OUTPUT_FILE)
     product_data = list()
     # Get the driver to pass to the ProductScraper
-    for row in products.iterrows():
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for row in products.iterrows():
 
-        try:
-            scraper = MAPPER[search_for]['scraper'](
-                query=query, driver=driver, url=row[1]["url"])
-            scraped = scraper.scrape()
-            if scraped is not None:
-                product_data.append(scraped)
+            try:
+                scraper = MAPPER[search_for]['scraper'](
+                    query=query, driver=driver, url=row[1]["url"])
+                result = executor.submit(scraper.scrape())
+                scraped = result.result
+                if scraped is not None:
+                    product_data.append(scraped)
 
-        except NoSuchElementException:
-            print(f"Could not scrape {row[1]['name']}")
-            continue
+            except Exception as e:
+
+                print(f"Could not scrape {search_for} of {row[1]['name']}")
+                with open('errors.txt', 'a') as f:
+                    f.write(
+                        f"Could not scrape {search_for} of {row[1]['name']}.\n")
+                continue
 
     product_data = pd.concat(product_data, ignore_index=True)
     return product_data
 
 
-def main(queries: list = QUERIES_TO_MAKE, tipo='reviews') -> None:
-    out = pd.DataFrame()
-    for query in queries:
+def main(query: str, max_workers=10, search=True):
+    """
+    Main function for the scraper module.
 
-        out = pd.concat([out, query_decathlon(query, search_for=tipo)])
-        with open('queries.txt', 'a') as f:
-            f.write(query+'\n')
-    out.to_csv(MAPPER[tipo]['output_file'], index=False)
-    return None
+    Args:
+        query (str): The search query to be used.
+        max_workers (int, optional): The maximum number of workers for concurrent scraping. Defaults to 10.
+        search (bool, optional): Flag indicating whether to perform a search or not. Defaults to True.
+
+    Returns:
+        bool: True if the scraping process is successful.
+    """
+    if search:
+        searcher = DecathlonSearcher(query=query)
+        driver = searcher.get_driver()
+        products = searcher.scrape()
+        products.to_csv(URLS_OUTPUT_FILE, index=False)
+        print(f"URLs saved to {URLS_OUTPUT_FILE}")
+    else:
+        driver = webdriver.Chrome(
+            service=Service(), options=webdriver.ChromeOptions())
+    for search_for in MAPPER.keys():
+        data = query_decathlon(query=query, search_for=search_for,
+                               driver=driver, max_workers=max_workers)
+
+        data.to_csv(MAPPER[search_for]['output_file'], index=False)
+        print(f"Data saved to {MAPPER[search_for]['output_file']}")
+    return True
 
 
 if __name__ == "__main__":
-    if len(
-            sys.argv) < 2:
-        print("Usage: python -m scraper *<queries> --get <info>")
-        print("Example: python -m scraper balón --get products")
-        print("Valid info: products, reviews, characteristics")
-        main(queries=QUERIES_TO_MAKE, tipo='reviews')
-        sys.exit()
-    elif sys.argv[-2] == '--get':
-        assert sys.argv[-1] in MAPPER.keys(
-        ), f'Invalid info: {sys.argv[-1]}, valid info: {list(MAPPER.keys())}'
-        print(f'Scraping {sys.argv[-1]}')
-        print(f'Queries: {sys.argv[1:-2]}')
-        main(queries=sys.argv[1:-2], tipo=sys.argv[-1])
-        sys.exit()
-    else:
-        print('No info provided')
-        print('Scraping products by default')
-        main(queries=sys.argv[1:], tipo='products')
-        sys.exit()
+    assert len(sys.argv) > 1, "Please provide a query to search for"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--query", type=str,
+                        help="The query to search for", required=True)
+    parser.add_argument("--max_workers", type=int,
+                        help="The maximum number of workers to use", default=10)
+    args = parser.parse_args()
+    main(args.query, args.max_workers, search=False)
