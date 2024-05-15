@@ -5,7 +5,7 @@ The data can be used later for knowledge discovery purposes.
 
 ## Project description
 
-This project is a part of a bigger purpose. The file `scraper.py` contains all the source code generated to scrap data from decathlon website. The scrapped data includes:
+The file `scraper.py` contains all the source code generated to scrap data from decathlon website. The scrapped data includes:
 
 - **products**: Price, name, description, discount etc... Identified bye a unique ID.
 - **product_reviews**: author data, text, rating, usage, product id.
