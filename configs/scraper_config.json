@@ -1,0 +1,17 @@
+{
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "headless": true,
+    "no_sandbox": true,
+    "disable_dev_shm_usage": true,
+    "disable_web_security": true,
+    "disable_notifications": true,
+    "disable_extensions": true,
+    "ignore_certificate_errors": true,
+    "allow_running_insecure_content": true,
+    "no_default_browser_check": true,
+    "no_first_run": true,
+    "log_level": "3",
+    "no_proxy_server": true,
+    "no_blink_features": "AutomationControlled",
+    "enable_javascript": true
+}
