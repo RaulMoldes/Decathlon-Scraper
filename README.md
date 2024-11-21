@@ -1,11 +1,11 @@
-# Generic Web Scraper
+# Zkraper
 
-The purpose of this project is to build  a web scraper that is so generic and robust that is able to scrape almost any website.
+Zkraper is a Python-based web scraping tool that uses Selenium with Google Chrome in headless mode for automated browsing and data extraction. The project is designed to run inside a Docker container, ensuring an isolated and consistent environment.
 
-## Project requirements
+# Steps:
 
-The project has been built using the WebDriver for Chrome. This WebDriver (`https://chromedriver.chromium.org/downloads`) requires Chrome version 114.
-Also, you will need a python 3.11 environment with:
+1. **Build the image**
+`docker build -t zkraper:V0 .`
 
-- selenium==4.20.0
-- pandas==2.1.3
+2 **Run the container**
+`docker run -it zkraper:v0 --rm "%cd%":/app `
