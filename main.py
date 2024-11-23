@@ -1,47 +1,60 @@
-from src.scraper.driver import start_chrome_driver, quit_driver
-from src.scraper.scrape_page import scrape_page
+from src.scraper.driver import start_driver, quit_driver
+from src.scraper.engine import scraping_engine
 import argparse
+from urllib.parse import urlparse
+import re
+
+def extract_domain(base_url):
+    # Parse the base URL to extract the domain
+    parsed_url = urlparse(base_url)
+    domain = parsed_url.netloc
+    return domain
+
+
+def extract_output_path(domain):
+     # Remove 'www.' prefix if present
+    domain = domain.lstrip('www.')
+
+    # Remove the '.com' suffix if present
+    domain = re.sub(r'\.com$', '', domain)
+    return f"outputs/{domain}"
 
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Web scraping script.")
     
+  
+    
     # Add arguments to the parser
     parser.add_argument(
-        "--driver_options", 
+        "--driver-options", 
         type=str, 
         required=True, 
         help="Path to the JSON file containing Chrome driver options."
     )
     parser.add_argument(
-        "--base_url", 
+        "--base-url", 
         type=str, 
         required=True, 
         help="Base URL of the website to scrape."
     )
     parser.add_argument(
-        "--domain", 
-        type=str, 
-        required=True, 
-        help="Domain of the website to scrape (e.g., www.example.com)."
+        "--max-scrapers", 
+        type=int, 
+        required=False, 
+        help="Maximum number of concurrent scrapers."
     )
-    parser.add_argument(
-        "--output_path", 
-        type=str, 
-        required=True, 
-        help="Directory path where the output data will be saved."
-    )
-
-    # Parse the arguments
     args = parser.parse_args()
 
     # Start the Chrome driver with the options from the JSON file
-    print("Starting chrome driver......")
-    driver = start_chrome_driver(driver_options_path=args.driver_options)
+    print("Starting driver......")
+    driver = start_driver(driver_options_path=args.driver_options)
 
+    domain = extract_domain(base_url=args.base_url)
+    output_path = extract_output_path(domain = domain)
     # Scrape the page
     print("Scraping page...")
-    scrape_page(driver=driver, base_url=args.base_url, domain=args.domain, output_dir=args.output_path)
+    scraping_engine(driver=driver, base_url=args.base_url, domain=domain, output_dir=output_path, max_scrapers=args.max_scrapers)
 
     # Quit the driver
     print("Quitting.....")

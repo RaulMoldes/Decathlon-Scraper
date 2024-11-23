@@ -8,6 +8,8 @@ Zkraper is a Python-based web scraping tool that uses Selenium with Google Chrom
 * **Docker Integration**: Encapsulated within a Docker container, ensuring consistency in dependencies and environment setup.
 * **Customizable**: Configure the Chrome driver options through a JSON file to adapt to various scraping needs.
 * **Output Flexibility**: Saves scraped data to a user-specified output directory.
+* **Concurrent Scraping**: Utilizes multithreading to run multiple scrapers concurrently, allowing for faster data extraction.
+
 
 # Project setup:
 
@@ -32,5 +34,7 @@ The main.py script requires several command-line arguments to control the scrapi
 
 * `--driver_options`: (Required) Path to a JSON file containing Chrome driver options (e.g., to specify headless mode, disable images, etc.).
 * `--base_url`: (Required) The base URL of the website you want to scrape.
-* `--domain`: (Required) The domain of the target website, such as www.example.com.
-* `--output_path`: (Required) Path to the directory where the output data will be saved.
+* `--max-scrapers`: (Optional) The maximum number of concurrent scrapers to run. Default is 10.
+
+## Example:
+ - `python -m main --driver-options "configs/scraper_config.json" --base-url "https://www.chatgpt.com" --max-scrapers 10`

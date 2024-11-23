@@ -13,5 +13,6 @@
     "log_level": "3",
     "no_proxy_server": true,
     "no_blink_features": "AutomationControlled",
-    "enable_javascript": true
+    "enable_javascript": true,
+    "extensions": []
 }
