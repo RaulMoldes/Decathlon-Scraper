@@ -1,4 +1,4 @@
-
+import requests
 from bs4 import BeautifulSoup
 from src.utils.scraping_utils import extract_all_links, extract_images, extract_meta_data, extract_all_text
 from src.utils.output_utils import save_to_files
@@ -7,10 +7,37 @@ from queue import Queue
 from src.scraper.driver import log_in
 import os
 
+def is_page_scrapeable(url:str, user_agent:str = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'):
+    try:
+
+        response = requests.get(url, headers={'User-Agent':user_agent})
+        
+       
+        if response.status_code != 200:
+            return False
+        
+        # Analizar el contenido de la página con BeautifulSoup
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        
+        principal = soup.get_text().strip()
+        
+        
+        if len(principal) < 50 or not soup.find(['article', 'main', 'div', 'section']):
+            return False
+
+        return True
+    
+    except requests.RequestException as e:
+        return False, "Error al intentar acceder a la URL: {}".format(str(e))
+    
 
 def scraper_routine(driver, url_queue:Queue, visited_urls:set, base_url:str, domain:str, output_dir:str):
-    log_in(driver, login_url=base_url)
-    scrape_page(driver= driver, url_queue=url_queue, visited_urls=visited_urls, base_url = base_url, domain = domain, output_dir=output_dir)
+    if is_page_scrapeable(base_url):
+        print(f"Url: {base_url} is scrapeable")
+        scrape_page(driver= driver, url_queue=url_queue, visited_urls=visited_urls, base_url = base_url, domain = domain, output_dir=output_dir)
+    else:
+        print(f"Skipping: {base_url}")
 
 # Main scraping function
 def scrape_page(driver, url_queue: Queue, visited_urls: set, base_url: str, domain: str, output_dir: str):
